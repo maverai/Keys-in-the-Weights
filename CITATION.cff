@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+title: "Transformer Autoencoders as 'Keys'"
+message: "If you use this code or results, please cite our paper (preferred) or this software."
+type: software
+authors:
+  - family-names: Okatan
+    given-names: Ayşe S.
+# Add your co-authors here...
+
+repository-code: "https://github.com/your-org/transformer-keys"
+license: MIT
+version: "1.0.0"
+date-released: "2025-09-30"
+
+preferred-citation:
+  type: article
+  title: "Model-Bound Latent Exchange (MoBLE): Zero-Shot Decoder Non-Transferability"
+  authors:
+    - family-names: Okatan
+      given-names: Ayşe S.
+    # ...
+  journal: "(conference venue name)"
+  year: 2025
+  doi: "10.XXXX/zenodo.XXXXXX"   # or your paper DOI
+  url: "https://arxiv.org/abs/XXXX.XXXXX"  # if applicable
+
+# Fallback software citation
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.XXXXXX"  # Zenodo DOI after archiving a release
