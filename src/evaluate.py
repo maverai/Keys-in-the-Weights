@@ -1,5 +1,6 @@
 from copy import deepcopy
 from typing import Dict, Tuple
+import argparse
 import torch
 from .config import DEVICE, ModelConfig, TrainConfig
 from .vocab import ITOS, decode_ids, PAD_ID
@@ -12,7 +13,7 @@ from .utils import set_seed, trim_to_eos, levenshtein, weight_l2_distance, atten
 def evaluate_pairs(models: Dict[str, TransformerAutoencoder],
                    loader,
                    n_batches: int = 10,
-                   max_decode_len: int = 50) -> Dict[Tuple[str, str], Dict[str, float]]:
+                   max_decode_len: int = 50):
     keys = list(models.keys())
     results = {}
     batches = []
@@ -22,11 +23,9 @@ def evaluate_pairs(models: Dict[str, TransformerAutoencoder],
             break
 
     for ka in keys:
-        A = models[ka]
-        A.eval()
+        A = models[ka]; A.eval()
         for kb in keys:
-            B = models[kb]
-            B.eval()
+            B = models[kb]; B.eval()
             exact, tok_correct, tok_total = 0, 0, 0
             lev_sum, seqs = 0.0, 0
             for src, tgt in batches:
@@ -59,9 +58,10 @@ def evaluate_pairs(models: Dict[str, TransformerAutoencoder],
                   f"levsim={results[(ka,kb)]['levenshtein_sim_pct']:.2f}%")
     return results
 
-def main():
+def run_experiment(train_epochs: int = 8):
+    """Train models and return (models_dict, test_loader)."""
     cfg_m = ModelConfig(vocab_size=len(ITOS))
-    cfg_t = TrainConfig()
+    cfg_t = TrainConfig(epochs=train_epochs)
     MAX_LEN = cfg_m.max_len
 
     train_loader, test_loader = make_loaders(cfg_t.batch_size, MAX_LEN)
@@ -89,6 +89,9 @@ def main():
     model1_sameseed = TransformerAutoencoder(cfg_m).to(DEVICE)
     train_one(model1_sameseed, train_loader, cfg_t, MAX_LEN)
 
+    models = {"M1": model1, "M2": model2, "M3": model3,
+              "M1_CLONE": model1_clone, "M1_SAMESEED": model1_sameseed}
+
     print("\n==> Weight L2 distances (sqrt(sum((W1-W2)^2)))")
     d12 = weight_l2_distance(model1, model2)
     d13 = weight_l2_distance(model1, model3)
@@ -99,14 +102,18 @@ def main():
     print(f"dist(Model1, Model1_CLONE)     = {d11c:.4f}  (should be ~0)")
     print(f"dist(Model1, Model1_SAMESEED)  = {d11s:.4f}  (0 only if truly deterministic)")
 
+    return models, test_loader
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--make-plots", action="store_true", help="Generate plots into ./plots after training.")
+    parser.add_argument("--epochs", type=int, default=8)
+    args = parser.parse_args()
+
+    models, test_loader = run_experiment(train_epochs=args.epochs)
+
     print("\n==> Evaluate self-decoding & cross-decoding")
-    models = {
-        "M1": model1,
-        "M2": model2,
-        "M3": model3,
-        "M1_CLONE": model1_clone,
-        "M1_SAMESEED": model1_sameseed
-    }
+    MAX_LEN = next(iter(models.values())).cfg.max_len
     results = evaluate_pairs(models, test_loader, n_batches=6, max_decode_len=MAX_LEN)
 
     print("\n==> Summary (encoder → decoder)")
@@ -120,6 +127,25 @@ def main():
         met = attention_divergence(models[a], models[b], test_loader, n_batches=3)
         print(f"{a} vs {b}: KL(A||B)={met['encoder_layer0_headavg_KL_A||B']:.4f}, "
               f"cos={met['encoder_layer0_headavg_cosine']:.4f}")
+
+    if args.make_plots:
+        from .viz.attn_plots import (
+            plot_attn_heatmaps_per_model,
+            plot_overlaid_attn_3d,
+            plot_crossdecode_attn_3d,
+            plot_cross_attn_heatmaps,
+            plot_decoder_self_per_head
+        )
+        text = "secure message"
+        keys = ["M1", "M2", "M3"]
+        plot_attn_heatmaps_per_model(models, text, keys, which="encoder", out_dir="plots", save_prefix="enc_heat")
+        plot_attn_heatmaps_per_model(models, text, keys, which="decoder", out_dir="plots", save_prefix="dec_heat")
+        plot_overlaid_attn_3d(models, text, keys, style="wire", out_dir="plots", save_stem="overlay_wire")
+        plot_crossdecode_attn_3d(models, text, "M1", keys, out_dir="plots", save_stem="crossdecode")
+        for k in keys + ["M1_CLONE", "M1_SAMESEED"]:
+            if k in models:
+                plot_decoder_self_per_head(models, text, k, out_dir="plots", save_prefix="dec_heads")
+        plot_cross_attn_heatmaps(models, text, "M1", keys, out_dir="plots", save_prefix="cross_heat")
 
 if __name__ == "__main__":
     main()

@@ -1,4 +1,4 @@
-.PHONY: install run reproduce
+.PHONY: install run reproduce plots
 
 install:
 	pip install -r requirements.txt
@@ -8,5 +8,10 @@ run:
 
 reproduce:
 	bash scripts/reproduce.sh
-# --- IGNORE ---
-# End of Makefile
+
+plots:
+	python scripts/make_plots.py
+.PHONY: clean
+clean:
+	rm -rf results/*
+	rm -rf figures/*
